@@ -450,13 +450,14 @@ function spawnWave(n) {
   }
 }
 
+// Each shell holds 2 stacks (2 novas then 4 novas), then next shell starts
 function getShellLayout(stacks) {
   const shells = [];
   let remaining = stacks;
   while (remaining > 0) {
-    const positionsInShell = Math.min(remaining, 4);
-    shells.push(positionsInShell);
-    remaining -= positionsInShell;
+    const fill = Math.min(remaining, 2);
+    shells.push(fill);
+    remaining -= fill;
   }
   return shells;
 }
