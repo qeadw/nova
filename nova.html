@@ -466,14 +466,16 @@ function spawnNova(x, y, sizeMultiplier) {
   const sizeMult = sizeMultiplier || 1;
   const baseMax = (13 + getUpgradeValue(g.upgrades.novaSize, 40)) * sizeMult * g.metaSizeMult;
   const speed = (250 + getUpgradeValue(g.upgrades.novaSpeed, 60)) * sizeMult * g.metaSpeedMult;
-  let damage = 1;
-  let novaColor = '#0ff';
-  const critColors = ['#ff0', '#f80', '#f00', '#f0f'];
-  if (g.upgrades.critClick > 0) {
-    const critChance = Math.min(0.9, 0.2 * getUpgradeValue(g.upgrades.critClick, 1));
-    for (let c = 0; c < 4; c++) {
-      if (Math.random() < critChance) { damage++; novaColor = critColors[c]; } else break;
+  const critColors = ['#0ff', '#ff0', '#f80', '#f00', '#f0f'];
+  function rollCrit() {
+    let dmg = 1, color = '#0ff';
+    if (g.upgrades.critClick > 0) {
+      const chance = Math.min(0.9, 0.2 * getUpgradeValue(g.upgrades.critClick, 1));
+      for (let c = 0; c < 4; c++) {
+        if (Math.random() < chance) { dmg++; color = critColors[c + 1]; } else break;
+      }
     }
+    return { damage: dmg, color };
   }
 
   g.killsThisNova = 0;
@@ -491,18 +493,22 @@ function spawnNova(x, y, sizeMultiplier) {
         const nx = x + Math.cos(a) * shellRadius;
         const ny = y + Math.sin(a) * shellRadius;
         const novaSize = baseMax * 0.6 * shellScale;
-        g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage, alpha: 1, ring: true, color: novaColor });
+        const crit = rollCrit();
+        g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
       }
     }
   } else {
-    g.novas.push({ id: g.nextNovaId++, x, y, radius: 0, maxRadius: baseMax, speed, damage, alpha: 1, ring: true, color: novaColor });
+    const crit = rollCrit();
+    g.novas.push({ id: g.nextNovaId++, x, y, radius: 0, maxRadius: baseMax, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
   }
 
   if (g.upgrades.aftershock) {
     const afterId = g.nextNovaId++;
     setTimeout(() => {
-      if (!g.gameOver)
-        g.novas.push({ id: afterId, x, y, radius: 0, maxRadius: baseMax * 0.7, speed: speed * 0.8, damage, alpha: 1, ring: true, color: novaColor });
+      if (!g.gameOver) {
+        const crit = rollCrit();
+        g.novas.push({ id: afterId, x, y, radius: 0, maxRadius: baseMax * 0.7, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+      }
     }, 200);
   }
 }
