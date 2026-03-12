@@ -355,6 +355,7 @@ function newGame() {
     leechKillCount: 0,
     sentinels: [],
     sentinelAngle: 0,
+    _enemyUidCounter: 0,
     bannedUpgrades: new Set(),
     godMode: false,
     skipUpgrades: false,
@@ -849,6 +850,7 @@ function update(dt) {
   // Update novas
   for (let i = g.novas.length - 1; i >= 0; i--) {
     const n = g.novas[i];
+    n._hitThisFrame = null;
     if (!n.bounces && n.bounces !== 0) {
       n.bounces = g.upgrades.novaSpeed > 0 ? Math.floor(getUpgradeValue(g.upgrades.novaSpeed, 1)) : 0;
       n.expanding = true;
@@ -894,11 +896,10 @@ function update(dt) {
       const dist = Math.sqrt(dx*dx + dy*dy);
       const ringWidth = 20;
       if (Math.abs(dist - n.radius) < ringWidth + e.radius) {
-        if (!n._hitCooldowns) n._hitCooldowns = {};
-        if (!e._novaUid) e._novaUid = Math.random();
-        const uid = e._novaUid;
-        if (n._hitCooldowns[uid] && (Date.now() - n._hitCooldowns[uid]) < 150) continue;
-        n._hitCooldowns[uid] = Date.now();
+        if (!n._hitThisFrame) n._hitThisFrame = new Set();
+        if (!e._uid) e._uid = ++g._enemyUidCounter;
+        if (n._hitThisFrame.has(e._uid)) continue;
+        n._hitThisFrame.add(e._uid);
 
         if (e.shieldUp && (e.type === 'shield' || (e.type === 'boss' && e.bossTraits.includes('shield')))) {
           const pierceDmg = g.upgrades.piercing > 0 ? Math.floor(getUpgradeValue(g.upgrades.piercing, 1)) : 0;
