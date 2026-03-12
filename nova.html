@@ -254,7 +254,7 @@ const UPGRADES = [
   { id: 'magnet', name: 'Magnet', desc: 'Score orbs pulled toward cursor (+range/stack)', maxStack: Infinity, icon: '\u{1F9F2}' },
   { id: 'barrier', name: 'Barrier', desc: '+1 max shield, 5% faster regen (30s base)', maxStack: Infinity, icon: '\u{1F6E1}' },
   { id: 'vortex', name: 'Vortex', desc: 'Novas pull enemies inward (+strength/stack)', maxStack: Infinity, icon: '\u{1F32A}' },
-  { id: 'chain', name: 'Chain Lightning', desc: 'Kills zap nearby enemies (+1 target/4 lvls, +15% dmg/4 lvls)', maxStack: Infinity, icon: '\u26A1' },
+  { id: 'chain', name: 'Chain Lightning', desc: 'Clicks zap nearby enemies (+1 target/4 lvls, +15% dmg/4 lvls)', maxStack: Infinity, icon: '\u26A1' },
   { id: 'leech', name: 'Life Leech', desc: 'Kills restore HP (fewer kills needed/stack)', maxStack: Infinity, icon: '\u{1FA78}' },
   { id: 'piercing', name: 'Piercing', desc: 'Novas hit shielded enemies through shields (+dmg through/stack)', maxStack: Infinity, icon: '\u{1F5E1}' },
 ];
@@ -900,37 +900,6 @@ function update(dt) {
             spawnParticles(e.x, e.y, '#f44', 20);
           }
 
-          // Chain Lightning: zap nearest enemies
-          if (g.upgrades.chain > 0) {
-            const chainRange = 120 * (1 + getUpgradeValue(g.upgrades.chain, 0.15));
-            const targets = 1 + Math.floor(g.upgrades.chain / 4);
-            const chainDmg = Math.ceil(n.damage * 0.5 * (1 + Math.floor(g.upgrades.chain / 4) * 0.15));
-            const hitSet = new Set([e]);
-            let originX = e.x, originY = e.y;
-            for (let t = 0; t < targets; t++) {
-              let closest = null, closestDist = chainRange;
-              for (const ce of g.enemies) {
-                if (hitSet.has(ce)) continue;
-                const cdx = ce.x - originX, cdy = ce.y - originY;
-                const cd = Math.sqrt(cdx*cdx + cdy*cdy);
-                if (cd < closestDist) { closestDist = cd; closest = ce; }
-              }
-              if (!closest) break;
-              hitSet.add(closest);
-              closest.hp -= chainDmg;
-              spawnParticles(closest.x, closest.y, '#ff0', 4);
-              if (closest.hp <= 0) {
-                spawnParticles(closest.x, closest.y, closest.color, 12);
-                spawnOrb(closest.x, closest.y, closest.points);
-                killCount++;
-                g.totalKills++;
-                if (!closest.bossMinion && g.wave.enemiesRemaining > 0) g.wave.enemiesRemaining--;
-                const ci = g.enemies.indexOf(closest);
-                if (ci !== -1) g.enemies.splice(ci, 1);
-              }
-              originX = closest.x; originY = closest.y;
-            }
-          }
 
           // Life Leech
           if (g.upgrades.leech > 0) {
@@ -1556,8 +1525,42 @@ function showGameOver() {
 canvas.addEventListener('click', (e) => {
   if (game && !game.paused && !game.gameOver) {
     audioCtx.resume();
-    spawnNova(e.clientX - game.shake.x, e.clientY - game.shake.y);
+    const clickX = e.clientX - game.shake.x, clickY = e.clientY - game.shake.y;
+    spawnNova(clickX, clickY);
     playNova();
+    // Chain Lightning on click
+    if (game.upgrades.chain > 0) {
+      const g = game;
+      const chainRange = 120 * (1 + getUpgradeValue(g.upgrades.chain, 0.15));
+      const targets = 1 + Math.floor(g.upgrades.chain / 4);
+      const baseDmg = 1 + (g.upgrades.critClick > 0 ? 1 : 0);
+      const chainDmg = Math.ceil(baseDmg * 0.5 * (1 + Math.floor(g.upgrades.chain / 4) * 0.15));
+      const hitSet = new Set();
+      let originX = clickX, originY = clickY;
+      for (let t = 0; t < targets; t++) {
+        let closest = null, closestDist = chainRange;
+        for (const ce of g.enemies) {
+          if (hitSet.has(ce)) continue;
+          const cdx = ce.x - originX, cdy = ce.y - originY;
+          const cd = Math.sqrt(cdx*cdx + cdy*cdy);
+          if (cd < closestDist) { closestDist = cd; closest = ce; }
+        }
+        if (!closest) break;
+        hitSet.add(closest);
+        closest.hp -= chainDmg;
+        spawnParticles(closest.x, closest.y, '#ff0', 4);
+        if (closest.hp <= 0) {
+          spawnParticles(closest.x, closest.y, closest.color, 12);
+          spawnOrb(closest.x, closest.y, closest.points);
+          g.totalKills++;
+          trackEnemyKill(closest.type);
+          if (!closest.bossMinion && g.wave.enemiesRemaining > 0) g.wave.enemiesRemaining--;
+          const ci = g.enemies.indexOf(closest);
+          if (ci !== -1) g.enemies.splice(ci, 1);
+        }
+        originX = closest.x; originY = closest.y;
+      }
+    }
   }
 });
 canvas.addEventListener('mousemove', (e) => { mouseX = e.clientX; mouseY = e.clientY; });
