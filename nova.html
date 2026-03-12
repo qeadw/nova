@@ -895,10 +895,9 @@ function update(dt) {
       const ringWidth = 20;
       if (Math.abs(dist - n.radius) < ringWidth + e.radius) {
         if (!n._hitCooldowns) n._hitCooldowns = {};
-        const eKey = e.x.toFixed(0) + ',' + e.y.toFixed(0) + ',' + (e.type || '');
         if (!e._novaUid) e._novaUid = Math.random();
         const uid = e._novaUid;
-        if (n._hitCooldowns[uid] && (Date.now() - n._hitCooldowns[uid]) < 300) continue;
+        if (n._hitCooldowns[uid] && (Date.now() - n._hitCooldowns[uid]) < 150) continue;
         n._hitCooldowns[uid] = Date.now();
 
         if (e.shieldUp && (e.type === 'shield' || (e.type === 'boss' && e.bossTraits.includes('shield')))) {
