@@ -285,6 +285,17 @@ function loadMeta() {
   try { return JSON.parse(localStorage.getItem('nova_meta')) || {}; } catch(e) { return {}; }
 }
 
+function loadCheatState() {
+  try { return JSON.parse(localStorage.getItem('nova_cheats')) || {}; } catch(e) { return {}; }
+}
+function saveCheatState(g) {
+  const state = {
+    godMode: g.godMode || false,
+    bannedUpgrades: [...g.bannedUpgrades],
+  };
+  localStorage.setItem('nova_cheats', JSON.stringify(state));
+}
+
 function saveMeta(meta) {
   localStorage.setItem('nova_meta', JSON.stringify(meta));
 }
@@ -344,7 +355,13 @@ function newGame() {
     sentinels: [],
     sentinelAngle: 0,
     bannedUpgrades: new Set(),
+    godMode: false,
   };
+
+  // Restore cheat state
+  const cheatState = loadCheatState();
+  if (cheatState.godMode) g.godMode = true;
+  if (cheatState.bannedUpgrades) g.bannedUpgrades = new Set(cheatState.bannedUpgrades);
 
   const startUpgradeStacks = meta.metaStartUpgrade || 0;
   if (startUpgradeStacks > 0) {
@@ -756,15 +773,15 @@ function update(dt) {
       e.vy = Math.sin(angle) * spd;
     }
 
-    // Gravity Well: slow enemies near base
+    // Gravity Well: slow enemies near base (min 35% speed)
     if (g.upgrades.slowfield > 0) {
       const dx = e.x - g.cx, dy = e.y - g.cy;
       const distToBase = Math.sqrt(dx*dx + dy*dy);
       const wellRadius = 200;
       if (distToBase < wellRadius) {
-        const slowPct = Math.min(0.85, 0.3 + getUpgradeValue(g.upgrades.slowfield - 1, 0.05));
+        const slowPct = Math.min(0.55, 0.3 + getUpgradeValue(g.upgrades.slowfield - 1, 0.05));
         const proximity = 1 - (distToBase / wellRadius);
-        const slowFactor = 1 - (slowPct * proximity);
+        const slowFactor = Math.max(0.35, 1 - (slowPct * proximity));
         e.vx *= slowFactor;
         e.vy *= slowFactor;
       }
@@ -1749,7 +1766,7 @@ function buildCheatMenu() {
     b.textContent = label;
     b.onmouseenter = () => b.style.background = 'rgba(255,0,0,0.3)';
     b.onmouseleave = () => b.style.background = 'rgba(255,0,0,0.1)';
-    b.onclick = (e) => { e.stopPropagation(); onclick(); buildCheatMenu(); };
+    b.onclick = (e) => { e.stopPropagation(); onclick(); saveCheatState(game); buildCheatMenu(); };
     content.appendChild(b);
   }
 
@@ -1838,6 +1855,7 @@ function buildCheatMenu() {
       ev.stopPropagation();
       if (game.bannedUpgrades.has(u.id)) game.bannedUpgrades.delete(u.id);
       else game.bannedUpgrades.add(u.id);
+      saveCheatState(game);
       buildCheatMenu();
     };
     content.appendChild(b);
@@ -1852,6 +1870,7 @@ function buildCheatMenu() {
       localStorage.removeItem('nova_highscore');
       localStorage.removeItem('nova_leaderboard');
       localStorage.removeItem('nova_bestiary');
+      localStorage.removeItem('nova_cheats');
       alert('Save data cleared.');
     }
   });
