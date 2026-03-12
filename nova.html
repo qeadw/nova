@@ -892,9 +892,12 @@ function update(dt) {
       const dist = Math.sqrt(dx*dx + dy*dy);
       const ringWidth = 20;
       if (Math.abs(dist - n.radius) < ringWidth + e.radius) {
-        if (!e._hitBy) e._hitBy = new Set();
-        if (e._hitBy.has(n.id)) continue;
-        e._hitBy.add(n.id);
+        if (!n._hitCooldowns) n._hitCooldowns = {};
+        const eKey = e.x.toFixed(0) + ',' + e.y.toFixed(0) + ',' + (e.type || '');
+        if (!e._novaUid) e._novaUid = Math.random();
+        const uid = e._novaUid;
+        if (n._hitCooldowns[uid] && (Date.now() - n._hitCooldowns[uid]) < 300) continue;
+        n._hitCooldowns[uid] = Date.now();
 
         if (e.shieldUp && (e.type === 'shield' || (e.type === 'boss' && e.bossTraits.includes('shield')))) {
           const pierceDmg = g.upgrades.piercing > 0 ? Math.floor(getUpgradeValue(g.upgrades.piercing, 1)) : 0;
