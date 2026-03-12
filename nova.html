@@ -483,18 +483,39 @@ function spawnWave(n) {
   }
 }
 
-// Shell layout: +2 novas per stack
-// Each layer holds 8 positions (4 cardinal + 4 diagonal), filled 2 at a time
-function getShellLayout(stacks) {
-  const totalNovas = stacks * 2;
-  const shells = [];
-  let remaining = totalNovas;
+// Multi-nova position layout: +2 novas per stack
+// Each tier: inner cardinals(4) → outer cardinals(4) → diagonals(4) = 12 per tier
+function getMultiNovaPositions(stacks) {
+  const positions = [];
+  let remaining = stacks * 2;
+  let tier = 0;
   while (remaining > 0) {
-    const inThisShell = Math.min(remaining, 8);
-    shells.push(inThisShell);
-    remaining -= inThisShell;
+    const innerR = 45 + tier * 100;
+    const outerR = 95 + tier * 100;
+    const diagR = 70 + tier * 100;
+    const scale = Math.pow(0.8, tier);
+    const tierSlots = [
+      { a: 0, r: innerR },              // E
+      { a: Math.PI, r: innerR },         // W
+      { a: -Math.PI/2, r: innerR },      // N
+      { a: Math.PI/2, r: innerR },       // S
+      { a: -Math.PI/2, r: outerR },      // N outer
+      { a: Math.PI/2, r: outerR },       // S outer
+      { a: 0, r: outerR },              // E outer
+      { a: Math.PI, r: outerR },         // W outer
+      { a: -Math.PI/4, r: diagR },       // NE
+      { a: -Math.PI*3/4, r: diagR },     // NW
+      { a: Math.PI/4, r: diagR },        // SE
+      { a: Math.PI*3/4, r: diagR },      // SW
+    ];
+    const take = Math.min(remaining, 12);
+    for (let i = 0; i < take; i++) {
+      positions.push({ a: tierSlots[i].a, r: tierSlots[i].r, scale });
+    }
+    remaining -= take;
+    tier++;
   }
-  return shells;
+  return positions;
 }
 
 function spawnNova(x, y, sizeMultiplier) {
@@ -517,21 +538,13 @@ function spawnNova(x, y, sizeMultiplier) {
   g.killsThisNova = 0;
 
   if (g.upgrades.multiNova > 0) {
-    const shells = getShellLayout(g.upgrades.multiNova);
-    // 8 fixed positions per ring: cardinals then diagonals
-    const ringAngles = [0, Math.PI/2, Math.PI, Math.PI*3/2, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4];
-    for (let s = 0; s < shells.length; s++) {
-      const shellRadius = 45 + s * 50;
-      const shellScale = Math.pow(0.8, s);
-      const count = shells[s];
-      for (let i = 0; i < count; i++) {
-        const a = ringAngles[i];
-        const nx = x + Math.cos(a) * shellRadius;
-        const ny = y + Math.sin(a) * shellRadius;
-        const novaSize = baseMax * 0.6 * shellScale;
-        const crit = rollCrit();
-        g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-      }
+    const positions = getMultiNovaPositions(g.upgrades.multiNova);
+    for (const pos of positions) {
+      const nx = x + Math.cos(pos.a) * pos.r;
+      const ny = y + Math.sin(pos.a) * pos.r;
+      const novaSize = baseMax * 0.6 * pos.scale;
+      const crit = rollCrit();
+      g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
     }
   } else {
     const crit = rollCrit();
@@ -546,19 +559,12 @@ function spawnNova(x, y, sizeMultiplier) {
       setTimeout(() => {
         if (!g.gameOver) {
           if (g.upgrades.multiNova > 0) {
-            const ashells = getShellLayout(g.upgrades.multiNova);
-            const aRingAngles = [0, Math.PI/2, Math.PI, Math.PI*3/2, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4];
-            for (let s = 0; s < ashells.length; s++) {
-              const shellRadius = 45 + s * 50;
-              const shellScale = Math.pow(0.8, s);
-              const count = ashells[s];
-              for (let i = 0; i < count; i++) {
-                const a = aRingAngles[i];
-                const nx = x + Math.cos(a) * shellRadius;
-                const ny = y + Math.sin(a) * shellRadius;
-                const crit = rollCrit();
-                g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * shellScale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-              }
+            const aPositions = getMultiNovaPositions(g.upgrades.multiNova);
+            for (const pos of aPositions) {
+              const nx = x + Math.cos(pos.a) * pos.r;
+              const ny = y + Math.sin(pos.a) * pos.r;
+              const crit = rollCrit();
+              g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * pos.scale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
             }
           } else {
             const crit = rollCrit();
