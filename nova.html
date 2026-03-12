@@ -291,6 +291,7 @@ function loadCheatState() {
 function saveCheatState(g) {
   const state = {
     godMode: g.godMode || false,
+    skipUpgrades: g.skipUpgrades || false,
     bannedUpgrades: [...g.bannedUpgrades],
   };
   localStorage.setItem('nova_cheats', JSON.stringify(state));
@@ -356,11 +357,13 @@ function newGame() {
     sentinelAngle: 0,
     bannedUpgrades: new Set(),
     godMode: false,
+    skipUpgrades: false,
   };
 
   // Restore cheat state
   const cheatState = loadCheatState();
   if (cheatState.godMode) g.godMode = true;
+  if (cheatState.skipUpgrades) g.skipUpgrades = true;
   if (cheatState.bannedUpgrades) g.bannedUpgrades = new Set(cheatState.bannedUpgrades);
 
   const startUpgradeStacks = meta.metaStartUpgrade || 0;
@@ -1407,6 +1410,10 @@ function draw() {
 
 // Upgrade screen
 function showUpgradeScreen() {
+  if (game.skipUpgrades) {
+    game.wave.waitingForUpgrade = false;
+    return;
+  }
   game.paused = true;
   const screen = document.getElementById('upgrade-screen');
   const cards = document.getElementById('upgrade-cards');
@@ -1865,6 +1872,7 @@ function buildCheatMenu() {
 
   section('Danger Zone');
   btn('God Mode: ' + (game.godMode ? 'ON' : 'OFF'), () => { game.godMode = !game.godMode; });
+  btn('Skip Upgrades: ' + (game.skipUpgrades ? 'ON' : 'OFF'), () => { game.skipUpgrades = !game.skipUpgrades; });
   btn('Reset All Save Data', () => {
     if (confirm('Delete ALL save data? Stardust, meta upgrades, leaderboard, bestiary?')) {
       localStorage.removeItem('nova_meta');
