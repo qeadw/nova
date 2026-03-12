@@ -954,21 +954,6 @@ function update(dt) {
       }
     }
 
-    if (!n.hitPlayer) {
-      const dxc = n.x - g.cx, dyc = n.y - g.cy;
-      const distCenter = Math.sqrt(dxc*dxc + dyc*dyc);
-      if (Math.abs(distCenter - n.radius) < 30) {
-        n.hitPlayer = true;
-        g.hp -= 2;
-        if (g.hp <= 0) {
-          g.hp = 0;
-          g.gameOver = true;
-          stopDrone();
-          showGameOver();
-          return;
-        }
-      }
-    }
 
     if (killCount > 0) {
       g.combo += killCount;
