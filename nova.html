@@ -773,7 +773,8 @@ function update(dt) {
       e.vy = Math.sin(angle) * spd;
     }
 
-    // Gravity Well: slow enemies near base (min 35% speed)
+    // Gravity Well: slow movement near base (min 35% speed)
+    let moveMult = 1;
     if (g.upgrades.slowfield > 0) {
       const dx = e.x - g.cx, dy = e.y - g.cy;
       const distToBase = Math.sqrt(dx*dx + dy*dy);
@@ -781,14 +782,12 @@ function update(dt) {
       if (distToBase < wellRadius) {
         const slowPct = Math.min(0.55, 0.3 + getUpgradeValue(g.upgrades.slowfield - 1, 0.05));
         const proximity = 1 - (distToBase / wellRadius);
-        const slowFactor = Math.max(0.35, 1 - (slowPct * proximity));
-        e.vx *= slowFactor;
-        e.vy *= slowFactor;
+        moveMult = Math.max(0.35, 1 - (slowPct * proximity));
       }
     }
 
-    e.x += e.vx * dt;
-    e.y += e.vy * dt;
+    e.x += e.vx * dt * moveMult;
+    e.y += e.vy * dt * moveMult;
 
     if (e.type === 'boss') {
       e.x += Math.sin(Date.now()/500) * 0.5;
