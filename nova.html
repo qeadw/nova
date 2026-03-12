@@ -249,7 +249,7 @@ const UPGRADES = [
   { id: 'novaSize', name: 'Nova Size+', desc: 'Bigger blast radius (+30%)', maxStack: Infinity, icon: '\u{1F4A5}' },
   { id: 'novaSpeed', name: 'Nova Speed+', desc: 'Ring bounces back +1 time (+speed)', maxStack: Infinity, icon: '\u26A1' },
   { id: 'aftershock', name: 'Aftershock', desc: 'Nova pulses again (+1 pulse per stack)', maxStack: Infinity, icon: '\u{1F300}' },
-  { id: 'multiNova', name: 'Multi-Nova', desc: 'Novas orbit click point in shell pattern', maxStack: Infinity, icon: '\u2728' },
+  { id: 'multiNova', name: 'Multi-Nova', desc: '+2 orbiting novas per stack (cardinal then diagonal)', maxStack: Infinity, icon: '\u2728' },
   { id: 'critClick', name: 'Critical Click', desc: '20% chance for 2\u00D7 damage', maxStack: Infinity, icon: '\u{1F3AF}' },
   { id: 'magnet', name: 'Magnet', desc: 'Score orbs pulled toward cursor (+range/stack)', maxStack: Infinity, icon: '\u{1F9F2}' },
   { id: 'barrier', name: 'Barrier', desc: '+1 max shield, 5% faster regen (30s base)', maxStack: Infinity, icon: '\u{1F6E1}' },
@@ -483,15 +483,16 @@ function spawnWave(n) {
   }
 }
 
-// Shell layout: each layer holds 2 stacks
-// Stack 1: 4 novas (cardinals), Stack 2: +4 diagonals (8 total), then next layer
+// Shell layout: +2 novas per stack
+// Each layer holds 8 positions (4 cardinal + 4 diagonal), filled 2 at a time
 function getShellLayout(stacks) {
+  const totalNovas = stacks * 2;
   const shells = [];
-  let remaining = stacks;
+  let remaining = totalNovas;
   while (remaining > 0) {
-    const fill = Math.min(remaining, 2);
-    shells.push(fill);
-    remaining -= fill;
+    const inThisShell = Math.min(remaining, 8);
+    shells.push(inThisShell);
+    remaining -= inThisShell;
   }
   return shells;
 }
@@ -517,30 +518,19 @@ function spawnNova(x, y, sizeMultiplier) {
 
   if (g.upgrades.multiNova > 0) {
     const shells = getShellLayout(g.upgrades.multiNova);
+    // 8 fixed positions per ring: cardinals then diagonals
+    const ringAngles = [0, Math.PI/2, Math.PI, Math.PI*3/2, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4];
     for (let s = 0; s < shells.length; s++) {
       const shellRadius = 45 + s * 50;
       const shellScale = Math.pow(0.8, s);
-      const fill = shells[s];
-      // fill 1 = 4 cardinals, fill 2 = 4 cardinals + 4 diagonals
-      const cardinalOffset = 0;
-      const diagonalOffset = Math.PI / 4;
-      for (let i = 0; i < 4; i++) {
-        const a = cardinalOffset + (Math.PI / 2) * i;
+      const count = shells[s];
+      for (let i = 0; i < count; i++) {
+        const a = ringAngles[i];
         const nx = x + Math.cos(a) * shellRadius;
         const ny = y + Math.sin(a) * shellRadius;
         const novaSize = baseMax * 0.6 * shellScale;
         const crit = rollCrit();
         g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-      }
-      if (fill >= 2) {
-        for (let i = 0; i < 4; i++) {
-          const a = diagonalOffset + (Math.PI / 2) * i;
-          const nx = x + Math.cos(a) * shellRadius;
-          const ny = y + Math.sin(a) * shellRadius;
-          const novaSize = baseMax * 0.6 * shellScale;
-          const crit = rollCrit();
-          g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-        }
       }
     }
   } else {
@@ -557,25 +547,17 @@ function spawnNova(x, y, sizeMultiplier) {
         if (!g.gameOver) {
           if (g.upgrades.multiNova > 0) {
             const ashells = getShellLayout(g.upgrades.multiNova);
+            const aRingAngles = [0, Math.PI/2, Math.PI, Math.PI*3/2, Math.PI/4, Math.PI*3/4, Math.PI*5/4, Math.PI*7/4];
             for (let s = 0; s < ashells.length; s++) {
               const shellRadius = 45 + s * 50;
               const shellScale = Math.pow(0.8, s);
-              const fill = ashells[s];
-              for (let i = 0; i < 4; i++) {
-                const a = (Math.PI / 2) * i;
+              const count = ashells[s];
+              for (let i = 0; i < count; i++) {
+                const a = aRingAngles[i];
                 const nx = x + Math.cos(a) * shellRadius;
                 const ny = y + Math.sin(a) * shellRadius;
                 const crit = rollCrit();
                 g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * shellScale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-              }
-              if (fill >= 2) {
-                for (let i = 0; i < 4; i++) {
-                  const a = Math.PI / 4 + (Math.PI / 2) * i;
-                  const nx = x + Math.cos(a) * shellRadius;
-                  const ny = y + Math.sin(a) * shellRadius;
-                  const crit = rollCrit();
-                  g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * shellScale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-                }
               }
             }
           } else {
