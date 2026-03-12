@@ -1717,7 +1717,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && game && !game.gameOver && !game.wave.waitingForUpgrade) {
     game.paused = !game.paused;
   }
-  if (e.key === '`') {
+  // Cheat code: type "cheater"
+  if (!window._cheatBuf) window._cheatBuf = '';
+  window._cheatBuf += e.key.toLowerCase();
+  if (window._cheatBuf.length > 7) window._cheatBuf = window._cheatBuf.slice(-7);
+  if (window._cheatBuf === 'cheater') {
+    window._cheatBuf = '';
     toggleCheatMenu();
   }
 });
