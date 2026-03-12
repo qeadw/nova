@@ -99,6 +99,7 @@ canvas { display: block; cursor: crosshair; }
   <div class="clickable" onclick="startGame()">[ CLICK TO START ]</div>
   <div class="shop-btn" onclick="event.stopPropagation(); showMetaScreen('start')">[ SHOP ]</div>
   <div class="lb-btn" onclick="event.stopPropagation(); showLeaderboard('start')">[ LEADERBOARD ]</div>
+  <div class="lb-btn" onclick="event.stopPropagation(); showBestiary('start')">[ BESTIARY ]</div>
 </div>
 
 <div id="gameover-screen">
@@ -111,6 +112,7 @@ canvas { display: block; cursor: crosshair; }
   <div class="clickable" onclick="startGame()">[ CLICK TO RETRY ]</div>
   <div class="shop-btn" onclick="event.stopPropagation(); showMetaScreen('gameover')">[ UPGRADES ]</div>
   <div class="lb-btn" onclick="event.stopPropagation(); showLeaderboard('gameover')">[ LEADERBOARD ]</div>
+  <div class="lb-btn" onclick="event.stopPropagation(); showBestiary('gameover')">[ BESTIARY ]</div>
 </div>
 
 <div id="upgrade-screen">
@@ -129,6 +131,14 @@ canvas { display: block; cursor: crosshair; }
   <h2>LEADERBOARD</h2>
   <div id="lb-content"></div>
   <div class="meta-close" onclick="closeLeaderboard()">[ BACK ]</div>
+</div>
+
+<div id="bestiary-screen" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.92); z-index:20; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:40px; font-family:'Segoe UI',sans-serif; color:#eee; overflow-y:auto;">
+  <h2 style="color:#0ff; font-size:28px; margin-bottom:20px; text-shadow:0 0 20px #0ff; letter-spacing:4px;">BESTIARY</h2>
+  <div id="bestiary-content" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center; max-width:800px; padding:0 20px;"></div>
+  <h2 style="color:#0ff; font-size:22px; margin:30px 0 15px; text-shadow:0 0 20px #0ff; letter-spacing:4px;">UPGRADES</h2>
+  <div id="bestiary-upgrades" style="display:flex; flex-wrap:wrap; gap:12px; justify-content:center; max-width:800px; padding:0 20px;"></div>
+  <div class="meta-close" onclick="closeBestiary()">[ BACK ]</div>
 </div>
 
 <script>
@@ -237,11 +247,16 @@ function playBossHit() {
 // Upgrades definition
 const UPGRADES = [
   { id: 'novaSize', name: 'Nova Size+', desc: 'Bigger blast radius (+30%)', maxStack: Infinity, icon: '\u{1F4A5}' },
-  { id: 'novaSpeed', name: 'Nova Speed+', desc: 'Ring expands faster (+25%)', maxStack: Infinity, icon: '\u26A1' },
-  { id: 'aftershock', name: 'Aftershock', desc: 'Nova pulses a second time', maxStack: 1, icon: '\u{1F300}' },
+  { id: 'novaSpeed', name: 'Nova Speed+', desc: 'Ring bounces back +1 time (+speed)', maxStack: Infinity, icon: '\u26A1' },
+  { id: 'aftershock', name: 'Aftershock', desc: 'Nova pulses again (+1 pulse per stack)', maxStack: Infinity, icon: '\u{1F300}' },
   { id: 'multiNova', name: 'Multi-Nova', desc: 'Novas orbit click point in shell pattern', maxStack: Infinity, icon: '\u2728' },
   { id: 'critClick', name: 'Critical Click', desc: '20% chance for 2\u00D7 damage', maxStack: Infinity, icon: '\u{1F3AF}' },
-  { id: 'magnet', name: 'Magnet', desc: 'Score orbs pulled toward cursor', maxStack: 1, icon: '\u{1F9F2}' },
+  { id: 'magnet', name: 'Magnet', desc: 'Score orbs pulled toward cursor (+range/stack)', maxStack: Infinity, icon: '\u{1F9F2}' },
+  { id: 'barrier', name: 'Barrier', desc: '+1 max shield, 5% faster regen (30s base)', maxStack: Infinity, icon: '\u{1F6E1}' },
+  { id: 'vortex', name: 'Vortex', desc: 'Novas pull enemies inward (+strength/stack)', maxStack: Infinity, icon: '\u{1F32A}' },
+  { id: 'chain', name: 'Chain Lightning', desc: 'Kills zap a nearby enemy for 1 dmg (+15% range/stack)', maxStack: Infinity, icon: '\u26A1' },
+  { id: 'leech', name: 'Life Leech', desc: 'Kills restore HP (fewer kills needed/stack)', maxStack: Infinity, icon: '\u{1FA78}' },
+  { id: 'overcharge', name: 'Overcharge', desc: '+1 nova dmg/stack but costs 3 HP per click', maxStack: Infinity, icon: '\u{1F525}' },
 ];
 
 const META_UPGRADES = [
@@ -272,10 +287,19 @@ function setStardust(val) {
   localStorage.setItem('nova_stardust', val.toString());
 }
 
-// Soft cap: levels 1-3 give full value, 4+ give 1/4 value
+// Soft cap: levels 1-3 full, 4-7 1/4th, 8-11 1/16th, etc.
 function getUpgradeValue(level, perLevel) {
-  if (level <= 3) return level * perLevel;
-  return 3 * perLevel + (level - 3) * perLevel * 0.25;
+  let value = 0;
+  let remaining = level;
+  let tier = 0;
+  while (remaining > 0) {
+    const tierLevels = Math.min(remaining, tier === 0 ? 3 : 4);
+    const scale = Math.pow(0.25, tier);
+    value += tierLevels * perLevel * scale;
+    remaining -= tierLevels;
+    tier++;
+  }
+  return value;
 }
 
 // Game state
@@ -291,7 +315,7 @@ function newGame() {
     score: 0, combo: 0, comboTimer: 0, comboMultiplier: 1, hp: baseHp, maxHp: baseHp,
     enemies: [], novas: [], particles: [], orbs: [],
     wave: { number: 0, enemiesRemaining: 0, active: false, spawnTimer: 0, betweenWaves: true, countdown: 2, waitingForUpgrade: false },
-    upgrades: { novaSize: 0, novaSpeed: 0, aftershock: 0, multiNova: 0, critClick: 0, magnet: 0 },
+    upgrades: { novaSize: 0, novaSpeed: 0, aftershock: 0, multiNova: 0, critClick: 0, magnet: 0, barrier: 0, vortex: 0, chain: 0, leech: 0, overcharge: 0 },
     shake: { x: 0, y: 0, intensity: 0 },
     flash: 0,
     paused: false,
@@ -304,6 +328,9 @@ function newGame() {
     metaSizeMult: 1 + (meta.metaNovaSize || 0) * 0.1,
     metaSpeedMult: 1 + (meta.metaNovaSpeed || 0) * 0.1,
     metaScoreMult: 1 + (meta.metaScoreMult || 0) * 0.1,
+    barrierShields: 0,
+    barrierRegenTimer: 0,
+    leechKillCount: 0,
   };
 
   const startUpgradeStacks = meta.metaStartUpgrade || 0;
@@ -323,7 +350,7 @@ function newGame() {
 // Enemy unlock schedule: new type every 3 waves
 // Wave 1: drifter, Wave 3: speeder, Wave 6: tank, Wave 9: splitter,
 // Wave 12: phaser, Wave 15: orbiter, Wave 18: zigzag, Wave 21: shield,
-// Wave 24: bomber
+// Wave 24: bomber, Wave 27: revenant
 const ENEMY_UNLOCKS = [
   { wave: 1, type: 'drifter' },
   { wave: 3, type: 'speeder' },
@@ -334,6 +361,7 @@ const ENEMY_UNLOCKS = [
   { wave: 18, type: 'zigzag' },
   { wave: 21, type: 'shield' },
   { wave: 24, type: 'bomber' },
+  { wave: 27, type: 'revenant' },
 ];
 
 function getUnlockedTypes(waveNum) {
@@ -355,6 +383,7 @@ function spawnEnemy(type, x, y, targetX, targetY) {
     zigzag:   { hp: 4, speed: 75,  radius: 11, color: '#ff4', shape: 'diamond',  points: 30 },
     shield:   { hp: 12, speed: 40,  radius: 18, color: '#4af', shape: 'hexagon',  points: 40 },
     bomber:   { hp: 4, speed: 50,  radius: 15, color: '#f44', shape: 'circle',  points: 45 },
+    revenant: { hp: 6, speed: 55,  radius: 14, color: '#a0f', shape: 'diamond', points: 50 },
     mini:     { hp: 2, speed: 80,  radius: 8,  color: '#0f0', shape: 'circle',  points: 10 },
     boss:     { hp: 10, speed: 25, radius: 40, color: '#fff', shape: 'hexagon',  points: 200 },
   };
@@ -368,6 +397,8 @@ function spawnEnemy(type, x, y, targetX, targetY) {
     orbitAngle: Math.random() * Math.PI * 2,
     zigzagTimer: Math.random() * Math.PI * 2,
     shieldUp: type === 'shield',
+    shieldLayers: type === 'shield' ? 15 : 0,
+    shieldMaxLayers: type === 'shield' ? 15 : 0,
     shieldCooldown: 0,
     bossTraits: [],
   };
@@ -417,7 +448,9 @@ function spawnWave(n) {
     if (unlocked.includes('zigzag')) boss.canZigzag = true;
     if (unlocked.includes('shield')) { boss.shieldUp = true; boss.shieldCooldown = 0; }
     if (unlocked.includes('bomber')) boss.canBomb = true;
+    if (unlocked.includes('revenant')) boss.canRevive = true;
     boss.color = '#fff';
+    trackEnemySeen('boss');
     g.bossActive = true;
     const extra = Math.floor(n / 2);
     g.wave.enemiesRemaining = 1 + extra;
@@ -450,7 +483,8 @@ function spawnWave(n) {
   }
 }
 
-// Each shell holds 2 stacks (2 novas then 4 novas), then next shell starts
+// Shell layout: each layer holds 2 stacks
+// Stack 1: 4 novas (cardinals), Stack 2: +4 diagonals (8 total), then next layer
 function getShellLayout(stacks) {
   const shells = [];
   let remaining = stacks;
@@ -476,6 +510,7 @@ function spawnNova(x, y, sizeMultiplier) {
         if (Math.random() < chance) { dmg++; color = critColors[c + 1]; } else break;
       }
     }
+    if (g.upgrades.overcharge > 0) { dmg += Math.floor(getUpgradeValue(g.upgrades.overcharge, 1)); }
     return { damage: dmg, color };
   }
 
@@ -485,17 +520,28 @@ function spawnNova(x, y, sizeMultiplier) {
     const shells = getShellLayout(g.upgrades.multiNova);
     for (let s = 0; s < shells.length; s++) {
       const shellRadius = 45 + s * 50;
-      const positionsFilled = shells[s];
-      const totalNovas = positionsFilled * 2;
-      const angleStep = (Math.PI * 2) / totalNovas;
       const shellScale = Math.pow(0.8, s);
-      for (let i = 0; i < totalNovas; i++) {
-        const a = angleStep * i;
+      const fill = shells[s];
+      // fill 1 = 4 cardinals, fill 2 = 4 cardinals + 4 diagonals
+      const cardinalOffset = 0;
+      const diagonalOffset = Math.PI / 4;
+      for (let i = 0; i < 4; i++) {
+        const a = cardinalOffset + (Math.PI / 2) * i;
         const nx = x + Math.cos(a) * shellRadius;
         const ny = y + Math.sin(a) * shellRadius;
         const novaSize = baseMax * 0.6 * shellScale;
         const crit = rollCrit();
         g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+      }
+      if (fill >= 2) {
+        for (let i = 0; i < 4; i++) {
+          const a = diagonalOffset + (Math.PI / 2) * i;
+          const nx = x + Math.cos(a) * shellRadius;
+          const ny = y + Math.sin(a) * shellRadius;
+          const novaSize = baseMax * 0.6 * shellScale;
+          const crit = rollCrit();
+          g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: novaSize, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+        }
       }
     }
   } else {
@@ -503,14 +549,43 @@ function spawnNova(x, y, sizeMultiplier) {
     g.novas.push({ id: g.nextNovaId++, x, y, radius: 0, maxRadius: baseMax, speed, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
   }
 
-  if (g.upgrades.aftershock) {
-    const afterId = g.nextNovaId++;
-    setTimeout(() => {
-      if (!g.gameOver) {
-        const crit = rollCrit();
-        g.novas.push({ id: afterId, x, y, radius: 0, maxRadius: baseMax * 0.7, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
-      }
-    }, 200);
+  if (g.upgrades.aftershock > 0) {
+    const pulseCount = Math.floor(getUpgradeValue(g.upgrades.aftershock, 1));
+    for (let p = 0; p < pulseCount; p++) {
+      const delay = 200 * (p + 1);
+      const pScale = Math.pow(0.7, p + 1);
+      setTimeout(() => {
+        if (!g.gameOver) {
+          if (g.upgrades.multiNova > 0) {
+            const ashells = getShellLayout(g.upgrades.multiNova);
+            for (let s = 0; s < ashells.length; s++) {
+              const shellRadius = 45 + s * 50;
+              const shellScale = Math.pow(0.8, s);
+              const fill = ashells[s];
+              for (let i = 0; i < 4; i++) {
+                const a = (Math.PI / 2) * i;
+                const nx = x + Math.cos(a) * shellRadius;
+                const ny = y + Math.sin(a) * shellRadius;
+                const crit = rollCrit();
+                g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * shellScale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+              }
+              if (fill >= 2) {
+                for (let i = 0; i < 4; i++) {
+                  const a = Math.PI / 4 + (Math.PI / 2) * i;
+                  const nx = x + Math.cos(a) * shellRadius;
+                  const ny = y + Math.sin(a) * shellRadius;
+                  const crit = rollCrit();
+                  g.novas.push({ id: g.nextNovaId++, x: nx, y: ny, radius: 0, maxRadius: baseMax * 0.6 * shellScale * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+                }
+              }
+            }
+          } else {
+            const crit = rollCrit();
+            g.novas.push({ id: g.nextNovaId++, x, y, radius: 0, maxRadius: baseMax * pScale, speed: speed * 0.8, damage: crit.damage, alpha: 1, ring: true, color: crit.color });
+          }
+        }
+      }, delay);
+    }
   }
 }
 
@@ -562,6 +637,19 @@ function update(dt) {
     }
   }
 
+  // Barrier regen
+  if (g.upgrades.barrier > 0) {
+    const maxShields = Math.floor(getUpgradeValue(g.upgrades.barrier, 1));
+    if (g.barrierShields < maxShields) {
+      const regenSpeed = 30 / (1 + getUpgradeValue(g.upgrades.barrier, 0.05));
+      g.barrierRegenTimer += dt;
+      if (g.barrierRegenTimer >= regenSpeed) {
+        g.barrierRegenTimer -= regenSpeed;
+        g.barrierShields = Math.min(g.barrierShields + 1, maxShields);
+      }
+    }
+  }
+
   // Combo timer
   if (g.comboTimer > 0) {
     g.comboTimer -= dt;
@@ -587,7 +675,9 @@ function update(dt) {
       g.wave.spawnTimer -= interval;
       const pos = randomEdgePos();
       const type = g.wave.spawnTypes[g.wave.spawnIndex];
-      g.enemies.push(spawnEnemy(type, pos.x, pos.y));
+      const spawned = spawnEnemy(type, pos.x, pos.y);
+      trackEnemySeen(type);
+      g.enemies.push(spawned);
       g.wave.spawnIndex++;
       g.wave.spawnQueue--;
     }
@@ -621,7 +711,23 @@ function update(dt) {
       e.visible = Math.sin(e.phaseTimer) > -0.3;
     }
 
-    if ((e.type === 'shield' || (e.type === 'boss' && e.bossTraits.includes('shield'))) && !e.shieldUp) {
+    if (e.type === 'shield' && !e.shieldUp && e.shieldLayers <= 0) {
+      e.shieldRegenTimer = (e.shieldRegenTimer || 0) + dt * 3;
+      if (e.shieldRegenTimer >= 1) {
+        const regen = Math.floor(e.shieldRegenTimer);
+        e.shieldRegenTimer -= regen;
+        e.shieldLayers = Math.min(e.shieldLayers + regen, e.shieldMaxLayers);
+        if (e.shieldLayers > 0) e.shieldUp = true;
+      }
+    } else if (e.type === 'shield' && e.shieldUp && e.shieldLayers < e.shieldMaxLayers) {
+      e.shieldRegenTimer = (e.shieldRegenTimer || 0) + dt * 3;
+      if (e.shieldRegenTimer >= 1) {
+        const regen = Math.floor(e.shieldRegenTimer);
+        e.shieldRegenTimer -= regen;
+        e.shieldLayers = Math.min(e.shieldLayers + regen, e.shieldMaxLayers);
+      }
+    }
+    if ((e.type === 'boss' && e.bossTraits.includes('shield')) && !e.shieldUp) {
       e.shieldCooldown -= dt;
       if (e.shieldCooldown <= 0) e.shieldUp = true;
     }
@@ -661,19 +767,76 @@ function update(dt) {
     const dx = e.x - g.cx, dy = e.y - g.cy;
     const dist = Math.sqrt(dx*dx + dy*dy);
     if (dist < 30 + e.radius) {
-      g.gameOver = true;
-      stopDrone();
-      showGameOver();
-      return;
+      if (e.type === 'boss') {
+        // Bosses one-shot through barrier
+        g.gameOver = true;
+        stopDrone();
+        showGameOver();
+        return;
+      }
+      const dmg = g.wave.number * 10;
+      if (g.barrierShields > 0) {
+        g.barrierShields--;
+        g.barrierRegenTimer = 0;
+        spawnParticles(g.cx, g.cy, '#4af', 20);
+        screenShake(8);
+      } else {
+        g.hp -= dmg;
+        screenShake(6);
+        spawnParticles(g.cx, g.cy, '#f00', 15);
+      }
+      g.enemies.splice(i, 1);
+      if (!e.bossMinion && g.wave.enemiesRemaining > 0) g.wave.enemiesRemaining--;
+      if (g.hp <= 0) {
+        g.hp = 0;
+        g.gameOver = true;
+        stopDrone();
+        showGameOver();
+        return;
+      }
+      continue;
     }
   }
 
   // Update novas
   for (let i = g.novas.length - 1; i >= 0; i--) {
     const n = g.novas[i];
-    n.radius += n.speed * dt;
-    n.alpha = 1 - (n.radius / n.maxRadius);
-    if (n.radius >= n.maxRadius) { g.novas.splice(i, 1); continue; }
+    if (!n.bounces && n.bounces !== 0) {
+      n.bounces = g.upgrades.novaSpeed > 0 ? Math.floor(getUpgradeValue(g.upgrades.novaSpeed, 1)) : 0;
+      n.expanding = true;
+    }
+    if (n.expanding) {
+      n.radius += n.speed * dt;
+      if (n.radius >= n.maxRadius) {
+        if (n.bounces > 0) {
+          n.bounces--;
+          n.expanding = false;
+        } else {
+          g.novas.splice(i, 1); continue;
+        }
+      }
+    } else {
+      n.radius -= n.speed * dt;
+      if (n.radius <= 5) {
+        n.radius = 5;
+        n.expanding = true;
+      }
+    }
+    n.alpha = Math.max(0.15, 1 - (n.radius / n.maxRadius));
+
+    // Vortex: pull enemies toward nova center
+    if (g.upgrades.vortex > 0) {
+      const vortexStr = 120 * (1 + getUpgradeValue(g.upgrades.vortex - 1, 0.3));
+      for (const e of g.enemies) {
+        const vdx = n.x - e.x, vdy = n.y - e.y;
+        const vdist = Math.sqrt(vdx*vdx + vdy*vdy);
+        if (vdist < n.radius * 1.5 && vdist > 5) {
+          const pull = vortexStr * n.alpha / Math.max(vdist, 30);
+          e.x += (vdx/vdist) * pull * dt * 60;
+          e.y += (vdy/vdist) * pull * dt * 60;
+        }
+      }
+    }
 
     let killCount = 0;
     for (let j = g.enemies.length - 1; j >= 0; j--) {
@@ -688,10 +851,17 @@ function update(dt) {
         e._hitBy.add(n.id);
 
         if (e.shieldUp && (e.type === 'shield' || (e.type === 'boss' && e.bossTraits.includes('shield')))) {
-          e.shieldUp = false;
-          e.shieldCooldown = e.type === 'boss' ? 2 : 3;
-          spawnParticles(e.x, e.y, '#4af', 6);
-          continue;
+          if (e.type === 'shield' && e.shieldLayers > 0) {
+            e.shieldLayers -= n.damage;
+            if (e.shieldLayers <= 0) { e.shieldLayers = 0; e.shieldUp = false; }
+            spawnParticles(e.x, e.y, '#4af', 6);
+            continue;
+          } else if (e.type === 'boss') {
+            e.shieldUp = false;
+            e.shieldCooldown = 2;
+            spawnParticles(e.x, e.y, '#4af', 6);
+            continue;
+          }
         }
 
         e.hp -= n.damage;
@@ -699,6 +869,7 @@ function update(dt) {
         if (e.hp <= 0) {
           spawnParticles(e.x, e.y, e.color, e.type === 'boss' ? 40 : 12);
           spawnOrb(e.x, e.y, e.points);
+          trackEnemyKill(e.type);
           killCount++;
           g.totalKills++;
           if (!e.bossMinion && g.wave.enemiesRemaining > 0) g.wave.enemiesRemaining--;
@@ -714,6 +885,17 @@ function update(dt) {
             }
           }
 
+          if ((e.type === 'revenant' || (e.type === 'boss' && e.canRevive)) && !e.hasRevived && Math.random() < 0.5) {
+            const rev = spawnEnemy('revenant', e.x + (Math.random()-0.5)*30, e.y + (Math.random()-0.5)*30);
+            rev.hasRevived = true;
+            rev.hp = Math.ceil(e.maxHp * 0.5);
+            rev.maxHp = rev.hp;
+            rev.color = '#c4f';
+            g.enemies.push(rev);
+            g.wave.enemiesRemaining++;
+            spawnParticles(e.x, e.y, '#a0f', 15);
+          }
+
           if (e.type === 'bomber' || (e.type === 'boss' && e.canBomb)) {
             const bombCount = e.type === 'boss' ? 6 : 3;
             for (let b = 0; b < bombCount; b++) {
@@ -726,6 +908,41 @@ function update(dt) {
               g.enemies.push(shrapnel);
             }
             spawnParticles(e.x, e.y, '#f44', 20);
+          }
+
+          // Chain Lightning: zap nearest enemy for 1 dmg
+          if (g.upgrades.chain > 0) {
+            const chainRange = 120 * (1 + getUpgradeValue(g.upgrades.chain, 0.15));
+            let closest = null, closestDist = chainRange;
+            for (const ce of g.enemies) {
+              if (ce === e) continue;
+              const cdx = ce.x - e.x, cdy = ce.y - e.y;
+              const cd = Math.sqrt(cdx*cdx + cdy*cdy);
+              if (cd < closestDist) { closestDist = cd; closest = ce; }
+            }
+            if (closest) {
+              closest.hp -= 1;
+              spawnParticles(closest.x, closest.y, '#ff0', 4);
+              if (closest.hp <= 0) {
+                spawnParticles(closest.x, closest.y, closest.color, 12);
+                spawnOrb(closest.x, closest.y, closest.points);
+                killCount++;
+                g.totalKills++;
+                if (!closest.bossMinion && g.wave.enemiesRemaining > 0) g.wave.enemiesRemaining--;
+                const ci = g.enemies.indexOf(closest);
+                if (ci !== -1) g.enemies.splice(ci, 1);
+              }
+            }
+          }
+
+          // Life Leech
+          if (g.upgrades.leech > 0) {
+            g.leechKillCount++;
+            const threshold = Math.max(1, Math.ceil(6 - getUpgradeValue(g.upgrades.leech, 1)));
+            if (g.leechKillCount >= threshold) {
+              g.leechKillCount = 0;
+              g.hp = Math.min(g.hp + 1, g.maxHp);
+            }
           }
 
           g.enemies.splice(j, 1);
@@ -784,10 +1001,11 @@ function update(dt) {
     o.x += o.vx * dt; o.y += o.vy * dt;
     o.vx *= 0.95; o.vy *= 0.95;
 
-    if (g.upgrades.magnet) {
+    if (g.upgrades.magnet > 0) {
+      const magRange = 200 * (1 + getUpgradeValue(g.upgrades.magnet - 1, 0.25));
       const dx = mouseX - o.x, dy = mouseY - o.y;
       const dist = Math.sqrt(dx*dx+dy*dy);
-      if (dist < 200 && dist > 5) {
+      if (dist < magRange && dist > 5) {
         const pull = 300 / dist;
         o.vx += (dx/dist) * pull * dt * 400;
         o.vy += (dy/dist) * pull * dt * 400;
@@ -1056,6 +1274,20 @@ function draw() {
   ctx.fillStyle = '#fff';
   ctx.fillText(`HP ${g.hp}/${g.maxHp}`, W / 2, hpY - 4);
 
+  // Barrier shields
+  if (g.upgrades.barrier > 0) {
+    const maxShields = Math.floor(getUpgradeValue(g.upgrades.barrier, 1));
+    const shieldY = hpY - 22;
+    ctx.textAlign = 'center';
+    ctx.font = '12px monospace';
+    let shieldStr = '';
+    for (let i = 0; i < maxShields; i++) {
+      shieldStr += i < g.barrierShields ? '\u{1F6E1}' : '\u25CB';
+    }
+    ctx.fillStyle = g.barrierShields > 0 ? '#4af' : '#555';
+    ctx.fillText(shieldStr, W / 2, shieldY);
+  }
+
   // Pause overlay
   if (g.paused && !g.wave.waitingForUpgrade) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1101,10 +1333,20 @@ function showUpgradeScreen() {
     card.className = 'upgrade-card';
     const currentLvl = game.upgrades[u.id];
     const nextLvl = currentLvl + 1;
-    const softCapNote = nextLvl >= 4 && u.maxStack > 1 ? ' <span style="color:#f80;font-size:11px">(diminishing)</span>' : '';
+    let softCapNote = '';
+    if (u.maxStack > 1) {
+      if (nextLvl >= 8) softCapNote = ' <span style="color:#f44;font-size:11px">(heavily diminishing)</span>';
+      else if (nextLvl >= 4) softCapNote = ' <span style="color:#f80;font-size:11px">(diminishing)</span>';
+    }
     card.innerHTML = `<span class="icon">${u.icon}</span><h3>${u.name}</h3><p>${u.desc}${softCapNote}</p><div class="stacks">x${nextLvl}</div>`;
     card.onclick = () => {
       game.upgrades[u.id]++;
+      trackUpgrade(u.id, game.upgrades[u.id]);
+      if (u.id === 'barrier') {
+        const maxShields = Math.floor(getUpgradeValue(game.upgrades.barrier, 1));
+        game.barrierShields = maxShields;
+        game.barrierRegenTimer = 0;
+      }
       screen.style.display = 'none';
       game.paused = false;
       game.wave.waitingForUpgrade = false;
@@ -1213,6 +1455,91 @@ function closeLeaderboard() {
   lbReturnTo = null;
 }
 
+// Bestiary tracking
+function loadBestiary() {
+  try { return JSON.parse(localStorage.getItem('nova_bestiary')) || { enemies: {}, upgrades: {} }; } catch(e) { return { enemies: {}, upgrades: {} }; }
+}
+function saveBestiary(b) { localStorage.setItem('nova_bestiary', JSON.stringify(b)); }
+
+function trackEnemySeen(type) {
+  const b = loadBestiary();
+  if (!b.enemies[type]) b.enemies[type] = { seen: true, kills: 0 };
+  b.enemies[type].seen = true;
+  saveBestiary(b);
+}
+function trackEnemyKill(type) {
+  const b = loadBestiary();
+  if (!b.enemies[type]) b.enemies[type] = { seen: true, kills: 0 };
+  b.enemies[type].kills = (b.enemies[type].kills || 0) + 1;
+  saveBestiary(b);
+}
+function trackUpgrade(id, level) {
+  const b = loadBestiary();
+  if (!b.upgrades[id]) b.upgrades[id] = { maxLevel: 0 };
+  if (level > b.upgrades[id].maxLevel) b.upgrades[id].maxLevel = level;
+  saveBestiary(b);
+}
+
+const ENEMY_INFO = {
+  drifter:  { name: 'Drifter', color: '#0ff', desc: 'Basic enemy. Drifts toward center.' },
+  speeder:  { name: 'Speeder', color: '#ff0', desc: 'Fast moving diamond shape.' },
+  tank:     { name: 'Tank', color: '#f0f', desc: 'High HP, shrinks as damaged.' },
+  splitter: { name: 'Splitter', color: '#0f0', desc: 'Splits into mini enemies on death.' },
+  phaser:   { name: 'Phaser', color: '#f80', desc: 'Phases in and out of visibility.' },
+  orbiter:  { name: 'Orbiter', color: '#f0f', desc: 'Orbits in spiraling path.' },
+  zigzag:   { name: 'Zigzag', color: '#ff4', desc: 'Moves in erratic zigzag pattern.' },
+  shield:   { name: 'Shield', color: '#4af', desc: '15 shield layers, regens 3/sec.' },
+  bomber:   { name: 'Bomber', color: '#f44', desc: 'Explodes into shrapnel on death.' },
+  revenant: { name: 'Revenant', color: '#a0f', desc: '50% chance to respawn on death.' },
+  boss:     { name: 'Boss', color: '#fff', desc: 'Appears every 5 waves with combined traits.' },
+};
+
+let bestiaryReturnTo = null;
+function showBestiary(returnTo) {
+  bestiaryReturnTo = returnTo;
+  if (returnTo === 'start') document.getElementById('start-screen').style.display = 'none';
+  else if (returnTo === 'gameover') document.getElementById('gameover-screen').style.display = 'none';
+
+  const b = loadBestiary();
+  const content = document.getElementById('bestiary-content');
+  content.innerHTML = '';
+
+  for (const [type, info] of Object.entries(ENEMY_INFO)) {
+    const seen = b.enemies[type];
+    const card = document.createElement('div');
+    card.style.cssText = 'width:160px; padding:14px; border:2px solid ' + (seen ? info.color : '#333') + '; border-radius:10px; background:rgba(20,20,30,0.9); text-align:center;';
+    if (seen) {
+      card.innerHTML = `<div style="font-size:24px; color:${info.color}; font-weight:bold; margin-bottom:6px;">${info.name}</div><div style="font-size:11px; color:#aaa; margin-bottom:8px;">${info.desc}</div><div style="font-size:12px; color:#888;">Kills: ${seen.kills || 0}</div>`;
+    } else {
+      card.innerHTML = `<div style="font-size:24px; color:#333; font-weight:bold; margin-bottom:6px;">???</div><div style="font-size:11px; color:#444;">Not yet encountered</div>`;
+    }
+    content.appendChild(card);
+  }
+
+  const upgContent = document.getElementById('bestiary-upgrades');
+  upgContent.innerHTML = '';
+  for (const u of UPGRADES) {
+    const data = b.upgrades[u.id];
+    const card = document.createElement('div');
+    card.style.cssText = 'width:160px; padding:14px; border:2px solid ' + (data ? '#0ff' : '#333') + '; border-radius:10px; background:rgba(20,20,30,0.9); text-align:center;';
+    if (data) {
+      card.innerHTML = `<div style="font-size:20px;">${u.icon}</div><div style="font-size:14px; color:#0ff; margin:4px 0;">${u.name}</div><div style="font-size:11px; color:#aaa;">${u.desc}</div><div style="font-size:12px; color:#888; margin-top:6px;">Max: x${data.maxLevel}</div>`;
+    } else {
+      card.innerHTML = `<div style="font-size:20px;">?</div><div style="font-size:14px; color:#333; margin:4px 0;">???</div><div style="font-size:11px; color:#444;">Not yet found</div>`;
+    }
+    upgContent.appendChild(card);
+  }
+
+  document.getElementById('bestiary-screen').style.display = 'flex';
+}
+
+function closeBestiary() {
+  document.getElementById('bestiary-screen').style.display = 'none';
+  if (bestiaryReturnTo === 'start') document.getElementById('start-screen').style.display = 'flex';
+  else if (bestiaryReturnTo === 'gameover') document.getElementById('gameover-screen').style.display = 'flex';
+  bestiaryReturnTo = null;
+}
+
 // Game over
 function showGameOver() {
   const screen = document.getElementById('gameover-screen');
@@ -1247,6 +1574,10 @@ function showGameOver() {
 canvas.addEventListener('click', (e) => {
   if (game && !game.paused && !game.gameOver) {
     audioCtx.resume();
+    if (game.upgrades.overcharge) {
+      game.hp -= 3;
+      if (game.hp <= 0) { game.hp = 1; }
+    }
     spawnNova(e.clientX - game.shake.x, e.clientY - game.shake.y);
     playNova();
   }
@@ -1260,6 +1591,7 @@ function startGame() {
   document.getElementById('upgrade-screen').style.display = 'none';
   document.getElementById('meta-screen').style.display = 'none';
   document.getElementById('leaderboard-screen').style.display = 'none';
+  document.getElementById('bestiary-screen').style.display = 'none';
   game = newGame();
   audioCtx.resume();
   startDrone();
@@ -1270,7 +1602,8 @@ document.addEventListener('keydown', (e) => {
   const go = document.getElementById('gameover-screen');
   const ms = document.getElementById('meta-screen');
   const lb = document.getElementById('leaderboard-screen');
-  if (ms.style.display === 'flex' || lb.style.display === 'flex') return;
+  const bs = document.getElementById('bestiary-screen');
+  if (ms.style.display === 'flex' || lb.style.display === 'flex' || bs.style.display === 'flex') return;
   if (ss.style.display === 'flex' || (game && game.gameOver && go.style.display === 'flex')) { startGame(); return; }
   if (e.key === 'Escape' && game && !game.gameOver && !game.wave.waitingForUpgrade) {
     game.paused = !game.paused;
