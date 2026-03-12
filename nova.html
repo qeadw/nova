@@ -1066,7 +1066,7 @@ function update(dt) {
 
   // Sentinels: orbiting damage novas
   if (g.upgrades.orbit > 0) {
-    const sentinelCount = Math.floor(getUpgradeValue(g.upgrades.orbit, 1));
+    const sentinelCount = g.upgrades.orbit;
     g.sentinelAngle += dt * 2;
     for (let s = 0; s < sentinelCount; s++) {
       const sa = g.sentinelAngle + (Math.PI * 2 / sentinelCount) * s;
@@ -1176,7 +1176,7 @@ function draw() {
 
   // Draw sentinels
   if (g.upgrades.orbit > 0) {
-    const sentinelCount = Math.floor(getUpgradeValue(g.upgrades.orbit, 1));
+    const sentinelCount = g.upgrades.orbit;
     for (let s = 0; s < sentinelCount; s++) {
       const sa = g.sentinelAngle + (Math.PI * 2 / sentinelCount) * s;
       const sx = g.cx + Math.cos(sa) * 80;
